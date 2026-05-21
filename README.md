@@ -1,143 +1,91 @@
-# harness-experimental
+# Spec Intake: RAGOps Harness (CLI + Tauri)
 
-Harness v0 for agent-driven software development.
+## Loại công việc (Input Type) & Làn rủi ro (Lane)
 
-This is not an app template. It is a repository-level operating harness for
-turning human intent or a product spec into agent-ready work: product
-contracts, story packets, validation expectations, architecture decisions, and
-eventually implementation.
+**Loại:** New spec — tạo ra một dự án mới hoàn toàn.
 
-The app is what users touch. The harness is what agents touch.
+**Làn (Lane):** High-Risk.
 
-## Why This Exists
+**Lý do:** Công cụ này can thiệp trực tiếp vào request API external systems, phân tích dữ liệu bảo mật, kiểm thử prompt injection/audit/security và hoạt động trên nhiều nền tảng CLI + Desktop App.
 
-Coding agents are becoming useful enough to participate in real software work,
-but the model alone is not the whole system. A repository also needs clear
-instructions, shared product truth, validation loops, internal tools, and
-decision records so an agent can understand what matters before it changes
-code.
+---
 
-Harness Engineering is the practice of designing that operating environment.
-The goal is not simply to make AI write code faster. The goal is to make
-AI-assisted software development more reliable, inspectable, and easier for
-humans to steer.
+## Tóm tắt dự án (Project Summary)
 
-OpenAI describes this shift as an agent-first world where humans steer and
-agents execute:
+Xây dựng một **RAG-Harness** — nền tảng điều phối LLMOps nhẹ gọn chạy dưới dạng CLI và ứng dụng Desktop bằng Tauri.
 
-https://openai.com/index/harness-engineering/
+Ứng dụng hoạt động như một middleware proxy giữa hệ thống RAG của người dùng và các LLM provider như OpenAI, Claude, v.v.
 
-## Current State
+Nền tảng cung cấp 3 giá trị cốt lõi:
 
-This repository is in Harness v0.
+1. **Giám sát chi phí/độ trễ (Observability)**
+2. **Đánh giá chất lượng RAG (Eval Pipeline)**
+3. **Kiểm thử bảo mật tự động (Red Teaming)**
 
-There is no application implementation and no baked-in product specification
-yet. The current work is the reusable project harness: the file structure,
-agent operating model, feature intake process, story templates, and validation
-expectations that help humans and agents turn a future user-provided spec into
-implementation work.
+---
 
-## What Counts As A Harness
+## Kiến trúc dự kiến (Architecture Questions)
 
-A repository starts to have a harness when it helps an agent answer practical
-engineering questions without relying only on chat history:
+Dựa theo `docs/ARCHITECTURE.md`:
 
-- What should I read first?
-- What type of work is this?
-- Which product contract does it affect?
-- How risky is the change?
-- What proof will show the work is done?
-- What decision or lesson should future agents inherit?
+### Runtime stack
 
-In this repo, those answers live in `AGENTS.md`, `docs/HARNESS.md`,
-`docs/FEATURE_INTAKE.md`, `docs/ARCHITECTURE.md`, `docs/TEST_MATRIX.md`,
-`docs/stories/`, `docs/decisions/`, and `docs/templates/`.
+- **Backend/Core:** Rust  
+  Dùng để xử lý proxy tốc độ cao, độ trễ thấp.
 
-## Try The Flow
+- **GUI:** Tauri + React/Next.js + Tailwind  
+  Dùng để xây dựng Dashboard.
 
-The fastest way to understand the harness is to inspect a tiny example:
+- **Storage:** SQLite cục bộ  
+  Lưu lịch sử log, test results và config. Không dùng cloud database để đảm bảo tính Native & Offline của CLI.
 
-- `docs/demo/README.md`: shows how a simple product idea becomes product docs,
-  stories, validation expectations, and decisions before implementation starts.
+### Product surfaces
 
-## Product Sources
+- Giao diện dòng lệnh **CLI** cho developer.
+- Giao diện **GUI Tauri Desktop** cho báo cáo trực quan.
 
-No product contract is currently defined.
+### Boundary inputs
 
-When a user provides a project specification, add or reference it as the input
-spec for the first buildout, then derive smaller living artifacts from it:
+- Tham số từ terminal:
+  - `harness scan`
+  - `harness eval`
+- API request bị intercept.
+- File config:
+  - `.harness.yaml`
 
-- `docs/product/`: current product contract files, created from the spec.
-- `docs/stories/`: story packets and backlog created from selected work.
-- `docs/TEST_MATRIX.md`: behavior-to-proof control panel.
-- `docs/decisions/`: durable decisions and tradeoffs.
+---
 
-Do not keep a project-specific spec or product breakdown in this harness until
-a real project supplies one.
+## Kế hoạch chia nhỏ (Candidate Epics & Product Docs)
 
-## Harness Sources
+Dự án sẽ được chia thành 4 Epic chính để hoàn thành trong 2 ngày Hackathon.
 
-- `AGENTS.md`: agent entrypoint and operating rules.
-- `docs/HARNESS.md`: human-agent collaboration model.
-- `docs/FEATURE_INTAKE.md`: tiny, normal, and high-risk work classification.
-- `docs/ARCHITECTURE.md`: generic architecture discovery and boundary rules.
-- `docs/HARNESS_BACKLOG.md`: proposed harness improvements.
-- `docs/templates/`: reusable spec-intake, story, decision, and validation
-  templates.
+| File Product Docs | Epic | Trạng thái / Hackathon Plan |
+|---|---|---|
+| `docs/product/finops-proxy.md` | **E01-Proxy-And-FinOps**: Xây dựng Core CLI bằng Rust. Chạy local proxy server ở port `8000` để chặn LLM request, tính toán token usage, latency và lưu vào SQLite. | Làm trong nửa ngày đầu — Ngày 1 |
+| `docs/product/red-teaming.md` | **E02-Red-Teaming**: Viết logic CLI gửi tự động hàng loạt prompt độc hại, ví dụ Prompt Injection, vào ứng dụng RAG mục tiêu và chấm điểm phòng thủ. | Làm trong nửa ngày sau — Ngày 1 |
+| `docs/product/eval-pipeline.md` | **E03-RAG-Eval**: Cung cấp lệnh CLI chấm điểm bộ Golden Dataset theo các trục Faithfulness và Answer Relevance. | Làm trong nửa ngày đầu — Ngày 2 |
+| `docs/product/tauri-dashboard.md` | **E04-GUI-Dashboard**: Bọc Tauri lên trên Core Rust. Đọc dữ liệu từ SQLite và hiển thị lên biểu đồ trực quan, tạo Wow Factor để đi thi. | Làm trong nửa ngày cuối — Ngày 2 |
 
-## Repository Structure
+---
 
-```text
-project/
-  AGENTS.md
-  README.md
-  docs/
-    HARNESS.md
-    FEATURE_INTAKE.md
-    ARCHITECTURE.md
-    TEST_MATRIX.md
-    HARNESS_BACKLOG.md
-    product/
-    stories/
-    decisions/
-    demo/
-    templates/
-  scripts/
-    README.md
-```
+## Hình dạng kiểm chứng (Validation Shape)
 
-## Working Rule
+### Unit Proof
 
-Implementation prompts do not go straight to code. They first pass through
-feature intake, become story-sized work when needed, and then carry both
-product validation and harness maintenance expectations.
+Test các hàm tính toán giá tiền token.
 
-## Install Harness Into A Project
+Ví dụ:
 
-From a target project directory, run:
+- GPT-4o có giá bao nhiêu trên mỗi `1K token`.
+- Hàm tính chi phí có xử lý đúng input/output token không.
+
+### Integration Proof
+
+Đảm bảo Local Proxy chuyển tiếp request thành công tới API thật mà không làm hỏng payload.
+
+### E2E Proof
+
+Chạy lệnh:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/hoangnb24/harness-experimental/main/scripts/install-harness.sh?$(date +%s)" | bash -s -- --yes
-```
-
-If the target already has `AGENTS.md`, `docs/`, or `scripts/`, choose one:
-
-```bash
-# Keep existing files and add only missing Harness files
-curl -fsSL "https://raw.githubusercontent.com/hoangnb24/harness-experimental/main/scripts/install-harness.sh?$(date +%s)" | bash -s -- --merge --yes
-
-# Back up and replace AGENTS.md, docs/, and scripts/
-curl -fsSL "https://raw.githubusercontent.com/hoangnb24/harness-experimental/main/scripts/install-harness.sh?$(date +%s)" | bash -s -- --override --yes
-```
-
-Or install into a specific path:
-
-```bash
-curl -fsSL "https://raw.githubusercontent.com/hoangnb24/harness-experimental/main/scripts/install-harness.sh?$(date +%s)" | bash -s -- --directory /path/to/project --yes
-```
-
-If the target already contains `AGENTS.md`, `docs/`, or `scripts/`, interactive
-installs ask whether to `1. Merge`, `2. Override`, or `3. Stop`. Non-interactive
-installs using `--yes` stop before writing unless `--merge` or `--override` is
-provided. Use `--dry-run` to preview changes. The installer itself and this
-repository's installer story are not copied into the target project.
+harness start
