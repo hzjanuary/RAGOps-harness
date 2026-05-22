@@ -11,11 +11,12 @@ larger CLI, evaluation, red teaming, or desktop features.
 
 ## Status
 
-Current milestone: US-011 Core Proxy and FinOps Logger.
+Current milestone: US-021 Red Teaming Engine.
 
 Implemented:
 
 - Rust backend with Axum.
+- CLI dispatch with `serve` and `scan` subcommands.
 - Local proxy server on `0.0.0.0:8000`.
 - `GET /health` runtime health check.
 - `POST /v1/chat/completions` forwarding to OpenAI Chat Completions.
@@ -24,12 +25,13 @@ Implemented:
   estimated USD cost.
 - JSON error envelopes for client, configuration, upstream, parsing, and local
   logging failures.
+- Red-team scanner that sends five concurrent malicious OpenAI-compatible chat
+  requests to a target endpoint and prints Safe/Vulnerable/Error counts.
 
 Planned product areas:
 
 - RAG evaluation pipeline.
-- Automated red teaming and prompt injection checks.
-- CLI workflows.
+- Additional CLI workflows.
 - Tauri desktop dashboard for local reports.
 - Multi-provider support.
 
@@ -86,6 +88,12 @@ Run the proxy:
 cargo run
 ```
 
+The explicit proxy command is also supported:
+
+```bash
+cargo run -- serve
+```
+
 Check health:
 
 ```bash
@@ -113,6 +121,16 @@ curl -sS http://127.0.0.1:8000/v1/chat/completions \
 
 The proxy uses `OPENAI_API_KEY` from the process environment or `.env` and sends
 it upstream. The local client request does not need to include the provider key.
+
+Run the red-team scanner against an OpenAI-compatible endpoint:
+
+```bash
+cargo run -- scan http://127.0.0.1:8000/v1/chat/completions
+```
+
+The scanner sends five concurrent malicious prompts using the OpenAI Chat
+Completions JSON shape and prints a terminal report with Safe, Vulnerable, and
+Error counts.
 
 ## Configuration
 
@@ -149,7 +167,8 @@ RAGOps Harness stores usage metadata only:
 - Upstream success status code.
 - Whether the model matched a known pricing rule.
 
-Prompt and completion content are not persisted by the current story.
+Prompt and completion content are not persisted by the proxy. Red-team scan
+prompts and responses are printed to stdout only and are not persisted.
 
 ## Validation
 
@@ -166,6 +185,9 @@ Current test coverage includes:
 - Cost calculation with cached prompt tokens.
 - Unknown model pricing behavior.
 - SQLite usage log insertion.
+- Red-team refusal marker detection.
+- OpenAI-style response text extraction.
+- CLI help and scan-report smoke checks are run manually as platform proof.
 
 Live OpenAI integration is intentionally manual because it requires real
 credentials and may incur provider cost.
@@ -174,9 +196,10 @@ credentials and may incur provider cost.
 
 ```text
 src/
-  main.rs      Axum server startup and configuration loading
+  main.rs      CLI dispatch for serve and scan modes
   proxy.rs     Chat Completions proxy, usage parsing, cost estimation, errors
   db.rs        SQLite connection setup, schema, and usage log persistence
+  red_team.rs  Concurrent malicious-prompt scanner and terminal report
 
 docs/
   HARNESS.md        Human-agent operating model
@@ -193,7 +216,7 @@ docs/
 - OpenAI Chat Completions only.
 - Streaming requests are rejected.
 - No incoming proxy authentication yet.
-- No dashboard or CLI command surface yet.
+- No dashboard yet.
 - Pricing constants must be maintained as provider pricing changes.
 - No provider retry policy beyond returning a graceful JSON error.
 

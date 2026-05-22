@@ -10,4 +10,5 @@ the work is selected or when a product decision needs a durable place to land.
 
 | Epic | Description | Status |
 | --- | --- | --- |
-| TBD | Add candidate epics after spec intake | unsliced |
+| E01 Proxy and FinOps | Local proxy, provider forwarding, usage logging, and cost visibility. | active |
+| E02 Security | Red teaming and prompt-injection checks for OpenAI-compatible endpoints. | active |

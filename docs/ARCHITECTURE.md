@@ -10,6 +10,15 @@ US-011 selected the first application stack for the core proxy:
 
 See `docs/decisions/0004-rust-axum-sqlite-core-proxy.md`.
 
+US-021 adds the first CLI and security-testing surface in the same Rust binary:
+
+- `clap` parses subcommands.
+- `serve` runs the existing Axum proxy.
+- `scan <target>` runs a bounded red-team scanner against an
+  OpenAI-compatible Chat Completions endpoint.
+
+See `docs/decisions/0005-cli-red-team-scanner.md`.
+
 The remaining sections keep the generic architecture questions and boundary
 rules that future implementation should adapt as additional product surfaces
 arrive.

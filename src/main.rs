@@ -1,85 +1,46 @@
 mod db;
 mod proxy;
+mod red_team;
 
-use std::env;
-use std::net::SocketAddr;
-use std::time::Duration;
+use std::error::Error;
 
-use axum::routing::{get, post};
-use axum::{Json, Router};
-use serde::Serialize;
-use tracing::{info, warn};
+use clap::{Parser, Subcommand};
 
-use crate::db::Database;
-use crate::proxy::AppState;
+type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
-#[derive(Debug, Serialize)]
-struct HealthResponse {
-    status: &'static str,
-    service: &'static str,
+#[derive(Debug, Parser)]
+#[command(
+    name = "ragops-harness",
+    version,
+    about = "Local RAGOps proxy and red-team scanner"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Run the local OpenAI Chat Completions proxy.
+    Serve,
+    /// Run the red-team prompt scanner against an OpenAI-compatible endpoint.
+    Scan {
+        /// Target URL that accepts OpenAI Chat Completions JSON.
+        target: String,
+    },
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> AppResult<()> {
     tracing_subscriber::fmt()
         .with_target(false)
         .with_level(true)
         .init();
 
-    load_dotenv_file();
-
-    let db_path =
-        env::var("RAGOPS_DB_PATH").unwrap_or_else(|_| "ragops_harness.sqlite3".to_owned());
-    let db = Database::open(&db_path)?;
-
-    let openai_api_key = env::var("OPENAI_API_KEY").ok();
-    if openai_api_key.is_none() {
-        warn!("OPENAI_API_KEY is not set; proxy requests will return JSON configuration errors");
+    match Cli::parse().command.unwrap_or(Command::Serve) {
+        Command::Serve => proxy::run().await?,
+        Command::Scan { target } => red_team::run_scan(&target).await?,
     }
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .user_agent(concat!("ragops-harness/", env!("CARGO_PKG_VERSION")))
-        .build()?;
-
-    let state = AppState::new(client, db, openai_api_key);
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/v1/chat/completions", post(proxy::chat_completions))
-        .with_state(state);
-
-    let address = SocketAddr::from(([0, 0, 0, 0], 8000));
-    let listener = tokio::net::TcpListener::bind(address).await?;
-    info!(
-        address = %listener.local_addr()?,
-        db_path = %db_path,
-        "RAGOps Harness proxy listening"
-    );
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
 
     Ok(())
-}
-
-fn load_dotenv_file() {
-    match dotenvy::dotenv() {
-        Ok(path) => info!(path = %path.display(), "Loaded .env configuration"),
-        Err(error) if error.not_found() => {}
-        Err(_) => warn!("Failed to load .env configuration; using existing process environment"),
-    }
-}
-
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok",
-        service: "ragops-harness",
-    })
-}
-
-async fn shutdown_signal() {
-    if let Err(error) = tokio::signal::ctrl_c().await {
-        warn!(error = %error, "failed to install Ctrl-C shutdown handler");
-    }
 }

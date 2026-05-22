@@ -1,10 +1,13 @@
+use std::env;
+use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+use axum::routing::{get, post};
+use axum::{Json, Router};
 use chrono::Utc;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -25,6 +28,12 @@ pub struct AppState {
     openai_api_key: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct HealthResponse {
+    status: &'static str,
+    service: &'static str,
+}
+
 impl AppState {
     pub fn new(client: Client, db: Database, openai_api_key: Option<String>) -> Self {
         Self {
@@ -33,6 +42,44 @@ impl AppState {
             openai_api_key,
         }
     }
+}
+
+pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    load_dotenv_file();
+
+    let db_path =
+        env::var("RAGOPS_DB_PATH").unwrap_or_else(|_| "ragops_harness.sqlite3".to_owned());
+    let db = Database::open(&db_path)?;
+
+    let openai_api_key = env::var("OPENAI_API_KEY").ok();
+    if openai_api_key.is_none() {
+        warn!("OPENAI_API_KEY is not set; proxy requests will return JSON configuration errors");
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .user_agent(concat!("ragops-harness/", env!("CARGO_PKG_VERSION")))
+        .build()?;
+
+    let state = AppState::new(client, db, openai_api_key);
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/v1/chat/completions", post(chat_completions))
+        .with_state(state);
+
+    let address = SocketAddr::from(([0, 0, 0, 0], 8000));
+    let listener = tokio::net::TcpListener::bind(address).await?;
+    info!(
+        address = %listener.local_addr()?,
+        db_path = %db_path,
+        "RAGOps Harness proxy listening"
+    );
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +143,27 @@ pub async fn chat_completions(State(state): State<AppState>, body: Bytes) -> Res
     match handle_chat_completions(state, body).await {
         Ok(response) => response,
         Err(error) => error.into_response(),
+    }
+}
+
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok",
+        service: "ragops-harness",
+    })
+}
+
+fn load_dotenv_file() {
+    match dotenvy::dotenv() {
+        Ok(path) => info!(path = %path.display(), "Loaded .env configuration"),
+        Err(error) if error.not_found() => {}
+        Err(_) => warn!("Failed to load .env configuration; using existing process environment"),
+    }
+}
+
+async fn shutdown_signal() {
+    if let Err(error) = tokio::signal::ctrl_c().await {
+        warn!(error = %error, "failed to install Ctrl-C shutdown handler");
     }
 }
 
