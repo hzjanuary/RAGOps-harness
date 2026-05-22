@@ -134,6 +134,14 @@ impl Database {
         Ok(())
     }
 
+    pub async fn with_connection<T>(
+        &self,
+        action: impl FnOnce(&Connection) -> Result<T, DbError>,
+    ) -> Result<T, DbError> {
+        let connection = self.connection.lock().await;
+        action(&connection)
+    }
+
     #[cfg(test)]
     pub async fn logged_count(&self) -> Result<u64, DbError> {
         let connection = self.connection.lock().await;

@@ -19,6 +19,24 @@ US-021 adds the first CLI and security-testing surface in the same Rust binary:
 
 See `docs/decisions/0005-cli-red-team-scanner.md`.
 
+US-031 adds a CLI RAG evaluation surface in the same Rust binary:
+
+- `eval --dataset <path>` reads a local JSON dataset.
+- `src/eval.rs` calls OpenAI Chat Completions directly with an LLM-as-judge
+  Faithfulness prompt.
+- Evaluation results are printed to stdout and are not persisted.
+
+See `docs/decisions/0006-cli-rag-evaluation-engine.md`.
+
+US-041 adds the first web dashboard surface to the existing Axum server:
+
+- `GET /api/stats` returns aggregate FinOps metrics from the proxy database.
+- `tower-http` serves static files from `ui/`.
+- `ui/index.html` renders FinOps stat cards, recent logs, and a Chart.js bar
+  chart from local SQLite metadata using `fetch("/api/stats")`.
+
+See `docs/decisions/0007-tauri-dashboard.md`.
+
 The remaining sections keep the generic architecture questions and boundary
 rules that future implementation should adapt as additional product surfaces
 arrive.

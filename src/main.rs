@@ -1,4 +1,6 @@
+mod dashboard;
 mod db;
+mod eval;
 mod proxy;
 mod red_team;
 
@@ -12,7 +14,7 @@ type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 #[command(
     name = "ragops-harness",
     version,
-    about = "Local RAGOps proxy and red-team scanner"
+    about = "Local RAGOps proxy, web dashboard, red-team scanner, and RAG evaluator"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -26,7 +28,14 @@ enum Command {
     /// Run the red-team prompt scanner against an OpenAI-compatible endpoint.
     Scan {
         /// Target URL that accepts OpenAI Chat Completions JSON.
+        #[arg(short, long)]
         target: String,
+    },
+    /// Run RAG faithfulness evaluation against a local JSON dataset.
+    Eval {
+        /// Path to a JSON array of records with question, context, and answer fields.
+        #[arg(short, long)]
+        dataset: String,
     },
 }
 
@@ -40,6 +49,7 @@ async fn main() -> AppResult<()> {
     match Cli::parse().command.unwrap_or(Command::Serve) {
         Command::Serve => proxy::run().await?,
         Command::Scan { target } => red_team::run_scan(&target).await?,
+        Command::Eval { dataset } => eval::run_eval(&dataset).await?,
     }
 
     Ok(())

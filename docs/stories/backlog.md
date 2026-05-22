@@ -12,3 +12,5 @@ the work is selected or when a product decision needs a durable place to land.
 | --- | --- | --- |
 | E01 Proxy and FinOps | Local proxy, provider forwarding, usage logging, and cost visibility. | active |
 | E02 Security | Red teaming and prompt-injection checks for OpenAI-compatible endpoints. | active |
+| E03 Evaluation | RAG answer quality evaluation, scoring, and reporting workflows. | active |
+| E04 Dashboard | Local desktop reporting surfaces for FinOps, quality, and security metrics. | active |

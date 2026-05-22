@@ -11,7 +11,7 @@ larger CLI, evaluation, red teaming, or desktop features.
 
 ## Status
 
-Current milestone: US-021 Red Teaming Engine.
+Current milestone: US-041 Web GUI Dashboard.
 
 Implemented:
 
@@ -27,12 +27,15 @@ Implemented:
   logging failures.
 - Red-team scanner that sends five concurrent malicious OpenAI-compatible chat
   requests to a target endpoint and prints Safe/Vulnerable/Error counts.
+- RAG evaluation CLI that reads a local JSON dataset, asks OpenAI to judge
+  answer faithfulness against context, and prints an average score.
+- Axum-served dashboard that reads local FinOps metadata and renders stat cards
+  plus a cost chart.
 
 Planned product areas:
 
-- RAG evaluation pipeline.
+- Additional dashboard reports.
 - Additional CLI workflows.
-- Tauri desktop dashboard for local reports.
 - Multi-provider support.
 
 ## Why This Exists
@@ -62,6 +65,7 @@ Runtime stack:
 - Rusqlite
 - Tokio
 - SQLite
+- Tower HTTP static file serving
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/decisions/0004-rust-axum-sqlite-core-proxy.md](docs/decisions/0004-rust-axum-sqlite-core-proxy.md)
@@ -132,11 +136,42 @@ The scanner sends five concurrent malicious prompts using the OpenAI Chat
 Completions JSON shape and prints a terminal report with Safe, Vulnerable, and
 Error counts.
 
+Run RAG faithfulness evaluation against a local JSON dataset:
+
+```bash
+cargo run -- eval --dataset ./dataset.json
+```
+
+Dataset format:
+
+```json
+[
+  {
+    "question": "What is the capital of France?",
+    "context": "France's capital city is Paris.",
+    "answer": "Paris."
+  }
+]
+```
+
+The evaluator calls OpenAI Chat Completions using `OPENAI_API_KEY` and prints
+the total evaluated records plus the average Faithfulness score.
+
+Launch the local dashboard by running the proxy server:
+
+```bash
+cargo run -- serve
+```
+
+Open `http://localhost:8000/` in a browser. The dashboard reads FinOps metadata
+from the same SQLite database used by the proxy and renders total cost, request
+count, average latency, recent logs, and a cost bar chart.
+
 ## Configuration
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `OPENAI_API_KEY` | Yes for proxy requests | None | OpenAI API key used for upstream calls. |
+| `OPENAI_API_KEY` | Yes for proxy requests and eval runs | None | OpenAI API key used for upstream calls. |
 | `RAGOPS_DB_PATH` | No | `ragops_harness.sqlite3` | SQLite database path for local usage logs. |
 
 Configuration rules:
@@ -168,7 +203,10 @@ RAGOps Harness stores usage metadata only:
 - Whether the model matched a known pricing rule.
 
 Prompt and completion content are not persisted by the proxy. Red-team scan
-prompts and responses are printed to stdout only and are not persisted.
+prompts and responses are printed to stdout only and are not persisted. RAG
+evaluation dataset rows and judge scores are also printed or processed in memory
+only and are not persisted. The dashboard reads existing FinOps metadata and
+does not write new records.
 
 ## Validation
 
@@ -187,7 +225,9 @@ Current test coverage includes:
 - SQLite usage log insertion.
 - Red-team refusal marker detection.
 - OpenAI-style response text extraction.
-- CLI help and scan-report smoke checks are run manually as platform proof.
+- RAG evaluation prompt construction and binary score parsing.
+- CLI help, eval help, scan-report smoke checks, and dashboard HTTP smoke checks
+  are run manually as platform proof.
 
 Live OpenAI integration is intentionally manual because it requires real
 credentials and may incur provider cost.
@@ -196,10 +236,15 @@ credentials and may incur provider cost.
 
 ```text
 src/
-  main.rs      CLI dispatch for serve and scan modes
-  proxy.rs     Chat Completions proxy, usage parsing, cost estimation, errors
-  db.rs        SQLite connection setup, schema, and usage log persistence
-  red_team.rs  Concurrent malicious-prompt scanner and terminal report
+  main.rs       CLI dispatch for serve, scan, and eval modes
+  proxy.rs      Chat Completions proxy, usage parsing, cost estimation, errors
+  db.rs         SQLite connection setup, schema, and usage log persistence
+  red_team.rs   Concurrent malicious-prompt scanner and terminal report
+  eval.rs       Local JSON RAG faithfulness evaluation through OpenAI
+  dashboard.rs  Axum FinOps stats API for the dashboard
+
+ui/
+  index.html    Static web dashboard frontend
 
 docs/
   HARNESS.md        Human-agent operating model
@@ -216,7 +261,9 @@ docs/
 - OpenAI Chat Completions only.
 - Streaming requests are rejected.
 - No incoming proxy authentication yet.
-- No dashboard yet.
+- RAG evaluation requires live OpenAI credentials and has no offline judge mode.
+- The dashboard is served by the same local server as the proxy.
+- Dashboard Tailwind and Chart.js assets load from CDNs.
 - Pricing constants must be maintained as provider pricing changes.
 - No provider retry policy beyond returning a graceful JSON error.
 
