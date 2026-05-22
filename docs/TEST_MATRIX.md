@@ -1,9 +1,7 @@
 # Test Matrix
 
-This file maps product behavior to proof.
-
-No product behavior has been defined or implemented yet. Do not mark a row
-implemented until tests or validation evidence exist.
+This file maps product behavior to proof. Do not mark a row implemented until
+tests or validation evidence exist.
 
 ## Status Values
 
@@ -19,7 +17,7 @@ implemented until tests or validation evidence exist.
 
 | Story | Contract | Unit | Integration | E2E | Platform | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TBD | Add rows when story packets are created | no | no | no | no | planned | none |
+| US-011 Core Proxy & FinOps Logger | Local OpenAI Chat Completions proxy loads `.env`, logs usage, and estimates cost to SQLite | yes | no | no | yes | implemented | `cargo check --target-dir /tmp/ragops-harness-target`; `cargo test --target-dir /tmp/ragops-harness-target` passed 3 tests; `cargo run --target-dir /tmp/ragops-harness-target` logged `.env` configuration loaded from the project root; `curl -sS http://127.0.0.1:8000/health` returned healthy JSON on 2026-05-22. Live OpenAI integration not run. |
 
 ## Evidence Rules
 

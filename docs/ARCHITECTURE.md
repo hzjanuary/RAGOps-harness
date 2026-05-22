@@ -1,10 +1,18 @@
 # Architecture
 
-No application stack is selected yet.
+US-011 selected the first application stack for the core proxy:
 
-No application code exists yet. This document defines generic architecture
-questions and boundary rules that future implementation should adapt after a
-user-provided spec and stack decision exist.
+- Rust backend.
+- Axum local HTTP server.
+- Reqwest OpenAI client.
+- Rusqlite local SQLite storage.
+- Tokio async runtime.
+
+See `docs/decisions/0004-rust-axum-sqlite-core-proxy.md`.
+
+The remaining sections keep the generic architecture questions and boundary
+rules that future implementation should adapt as additional product surfaces
+arrive.
 
 ## Discovery Before Shape
 
