@@ -1,15 +1,26 @@
-# TARGET STORY: US-041 Web GUI Dashboard (Pivot from Tauri)
+# TARGET STORY: US-042 Pure CLI Dashboard (Pivot from Web GUI)
 
 ## 1. ARCHITECTURE BOUNDARIES
-- Remove `tauri` and `tauri-build` completely.
-- Add `tower-http` to serve static files.
-- Run UI via default browser at `http://localhost:8000/`.
-- Backend: Axum handles both `/v1/chat/completions` (Proxy) and `/api/stats` (FinOps DB Query).
-- Frontend: `ui/index.html` uses standard `fetch('/api/stats')` instead of Tauri API.
+- Remove Web GUI completely. Delete the `ui/` directory.
+- Remove `tower-http` from `Cargo.toml`.
+- Add `comfy-table` to `Cargo.toml` to render beautiful terminal tables (like docker or gh cli).
+- CLI Command: `ragops-harness dashboard` (runs once, prints the report to stdout, and exits).
 
-## 2. EXECUTION PLAN
-1. Update `Cargo.toml`: Remove `tauri`, `tauri-build`, `build-dependencies`. Add `tower-http = { version = "0.5", features = ["fs", "cors"] }`.
-2. Delete `build.rs` and `tauri.conf.json`.
-3. Update `src/dashboard.rs`: Remove Tauri imports. Implement Axum handler `pub async fn api_stats(State(state): State<AppState>) -> impl IntoResponse`. Aggregate total_requests, total_cost_usd, avg_latency_ms, and fetch last 5 logs. Return JSON.
-4. Update `src/main.rs`: In `Serve` command router, add `.route("/api/stats", get(dashboard::api_stats))` and `.fallback_service(tower_http::services::ServeDir::new("ui"))`.
-5. Update `ui/index.html`: Replace `window.__TAURI__.invoke(...)` with `fetch('/api/stats').then(res => res.json())`.
+## 2. DOMAIN MODEL (CLI Dashboard)
+- Connect to SQLite `harness.db`.
+- Aggregate Statistics: Total Requests, Total Cost (USD), Average Latency (ms).
+- Fetch Latest Logs: Retrieve the 5 most recent requests (ID, Model, Latency, Total Tokens, Cost).
+- Output: Print a summary section, followed by a formatted `comfy-table` showing the recent logs.
+
+## 3. EXECUTION PLAN
+1. Update `Cargo.toml`: Remove `tower-http`. Add `comfy-table = "7.1"`.
+2. Delete the `ui/` folder entirely.
+3. Update `src/main.rs`: 
+   - Add `Dashboard` back to the `Commands` enum in `clap`.
+   - Remove `tower_http` and `ServeDir` fallback from the Axum proxy router in the `Serve` arm. 
+   - Route the `Dashboard` command to `crate::dashboard::run_dashboard(&db_path).await`.
+4. Rewrite `src/dashboard.rs`:
+   - Remove all Axum-related imports (`IntoResponse`, `Json`, `State`).
+   - Implement `pub async fn run_dashboard(db_path: &str)`.
+   - Query the database directly.
+   - Print the "RAGOps FinOps Report" using `println!` and `comfy-table::Table`.

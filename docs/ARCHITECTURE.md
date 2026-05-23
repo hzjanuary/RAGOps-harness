@@ -28,14 +28,18 @@ US-031 adds a CLI RAG evaluation surface in the same Rust binary:
 
 See `docs/decisions/0006-cli-rag-evaluation-engine.md`.
 
-US-041 adds the first web dashboard surface to the existing Axum server:
+US-041 added a web dashboard surface to the existing Axum server, but that
+surface is superseded by US-042.
 
-- `GET /api/stats` returns aggregate FinOps metrics from the proxy database.
-- `tower-http` serves static files from `ui/`.
-- `ui/index.html` renders FinOps stat cards, recent logs, and a Chart.js bar
-  chart from local SQLite metadata using `fetch("/api/stats")`.
+US-042 replaces the web dashboard with a pure CLI dashboard:
 
-See `docs/decisions/0007-tauri-dashboard.md`.
+- `dashboard` reads the local SQLite FinOps database and exits.
+- `src/dashboard.rs` queries aggregate stats and the five latest logs directly
+  through `Database`.
+- `comfy-table` renders the latest logs in a terminal table.
+- The proxy no longer exposes `GET /api/stats` or serves `ui/` static files.
+
+See `docs/decisions/0008-pure-cli-dashboard.md`.
 
 The remaining sections keep the generic architecture questions and boundary
 rules that future implementation should adapt as additional product surfaces

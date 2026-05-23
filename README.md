@@ -1,116 +1,102 @@
 # RAGOps Harness
 
-RAGOps Harness is a local-first LLMOps harness for Retrieval-Augmented
-Generation applications. The current implementation provides a Rust HTTP proxy
-that forwards OpenAI Chat Completions requests, records token usage and latency,
-estimates cost, and stores FinOps records in SQLite.
+RAGOps Harness is a local-first Rust tool for inspecting RAG and LLM application
+behavior. It currently provides a local OpenAI Chat Completions proxy, FinOps
+usage logging, a terminal dashboard, a basic red-team scanner, and a simple RAG
+faithfulness evaluator.
 
-The project is intentionally small right now. The harness docs define how future
-agents should turn product ideas into validated story-sized work before adding
-larger CLI, evaluation, red teaming, or desktop features.
+The system is intentionally small and CLI-first. Product behavior is tracked in
+`docs/product/`, story evidence in `docs/stories/`, and validation status in
+`docs/TEST_MATRIX.md`.
 
-## Status
+## Current Status
 
-Current milestone: US-041 Web GUI Dashboard.
+Current milestone: `US-042 Pure CLI Dashboard`.
 
 Implemented:
 
-- Rust backend with Axum.
-- CLI dispatch with `serve` and `scan` subcommands.
-- Local proxy server on `0.0.0.0:8000`.
-- `GET /health` runtime health check.
+- Local Axum proxy on `0.0.0.0:8000`.
+- `GET /health`.
 - `POST /v1/chat/completions` forwarding to OpenAI Chat Completions.
-- `.env` loading before runtime configuration reads.
-- SQLite usage logging for token counts, latency, model, upstream id, and
-  estimated USD cost.
-- JSON error envelopes for client, configuration, upstream, parsing, and local
-  logging failures.
-- Red-team scanner that sends five concurrent malicious OpenAI-compatible chat
-  requests to a target endpoint and prints Safe/Vulnerable/Error counts.
-- RAG evaluation CLI that reads a local JSON dataset, asks OpenAI to judge
-  answer faithfulness against context, and prints an average score.
-- Axum-served dashboard that reads local FinOps metadata and renders stat cards
-  plus a cost chart.
+- SQLite FinOps logging for token usage, latency, model, upstream id, and
+  estimated cost.
+- CLI dashboard that prints aggregate FinOps stats and the five latest logs.
+- CLI red-team scanner for OpenAI-compatible Chat Completions endpoints.
+- CLI RAG faithfulness evaluator using OpenAI as a judge.
 
-Planned product areas:
+Retired:
 
-- Additional dashboard reports.
-- Additional CLI workflows.
-- Multi-provider support.
+- The Axum-served web dashboard from `US-041`.
+- `GET /api/stats`.
+- Static `ui/` assets and direct `tower-http` usage.
 
-## Why This Exists
-
-RAG systems often fail quietly. They can spend more than expected, respond too
-slowly, drift in quality, or become vulnerable to prompt injection. RAGOps
-Harness is designed to sit between a RAG application and an LLM provider so
-developers can inspect cost, latency, quality, and security behavior locally.
-
-The first slice focuses on FinOps visibility because it gives immediate runtime
-evidence without storing prompt or completion content.
-
-## Architecture
-
-```text
-RAG app
-  -> RAGOps Harness local proxy
-      -> OpenAI Chat Completions
-      -> SQLite FinOps log
-```
-
-Runtime stack:
-
-- Rust
-- Axum
-- Reqwest
-- Rusqlite
-- Tokio
-- SQLite
-- Tower HTTP static file serving
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/decisions/0004-rust-axum-sqlite-core-proxy.md](docs/decisions/0004-rust-axum-sqlite-core-proxy.md)
-for the accepted implementation shape.
-
-## Quick Start
-
-Prerequisites:
+## Requirements
 
 - Rust toolchain.
-- An OpenAI API key.
+- OpenAI API key for proxy forwarding and RAG evaluation.
+- SQLite is provided through the bundled `rusqlite` dependency.
 
-Create a local `.env` file:
+## Configuration
+
+Create a local `.env` file when using OpenAI-backed commands:
 
 ```bash
 OPENAI_API_KEY=sk-your-key-here
-# Optional:
 RAGOPS_DB_PATH=ragops_harness.sqlite3
+```
+
+Environment variables:
+
+| Variable | Required | Default | Used by |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | Yes for proxy requests and eval runs | none | `serve`, `eval` |
+| `RAGOPS_DB_PATH` | No | `ragops_harness.sqlite3` | `serve`, `dashboard` |
+
+Exported environment variables take precedence over `.env`.
+
+## Commands
+
+Show the command surface:
+
+```bash
+cargo run -- --help
 ```
 
 Run the proxy:
 
 ```bash
 cargo run
-```
-
-The explicit proxy command is also supported:
-
-```bash
+# or
 cargo run -- serve
 ```
 
-Check health:
+Print the CLI dashboard:
 
 ```bash
-curl -sS http://127.0.0.1:8000/health
+cargo run -- dashboard
 ```
 
-Expected response:
+Run a red-team scan:
 
-```json
-{"status":"ok","service":"ragops-harness"}
+```bash
+cargo run -- scan --target http://127.0.0.1:8000/v1/chat/completions
 ```
 
-Send a non-streaming Chat Completions request through the local proxy:
+Run RAG faithfulness evaluation:
+
+```bash
+cargo run -- eval --dataset ./dataset.json
+```
+
+## Proxy
+
+The proxy accepts OpenAI Chat Completions JSON at:
+
+```text
+POST http://127.0.0.1:8000/v1/chat/completions
+```
+
+Example:
 
 ```bash
 curl -sS http://127.0.0.1:8000/v1/chat/completions \
@@ -123,26 +109,76 @@ curl -sS http://127.0.0.1:8000/v1/chat/completions \
   }'
 ```
 
-The proxy uses `OPENAI_API_KEY` from the process environment or `.env` and sends
-it upstream. The local client request does not need to include the provider key.
-
-Run the red-team scanner against an OpenAI-compatible endpoint:
+Health check:
 
 ```bash
-cargo run -- scan http://127.0.0.1:8000/v1/chat/completions
+curl -sS http://127.0.0.1:8000/health
 ```
 
-The scanner sends five concurrent malicious prompts using the OpenAI Chat
-Completions JSON shape and prints a terminal report with Safe, Vulnerable, and
-Error counts.
+Expected response:
 
-Run RAG faithfulness evaluation against a local JSON dataset:
-
-```bash
-cargo run -- eval --dataset ./dataset.json
+```json
+{"status":"ok","service":"ragops-harness"}
 ```
 
-Dataset format:
+The proxy loads `.env`, reads `OPENAI_API_KEY`, forwards non-streaming requests
+to OpenAI, parses the `usage` block, estimates cost, and writes metadata to
+SQLite. Streaming requests are rejected because usage logging requires a
+complete JSON response.
+
+## CLI Dashboard
+
+The dashboard is read-only and prints a one-shot terminal report:
+
+```text
+=== RAGOps FinOps CLI Report ===
+Database: ragops_harness.sqlite3
+Total Requests: 0
+Total Cost (USD): 0.000000
+Average Latency (ms): 0.00
+```
+
+It then renders a `comfy-table` table with:
+
+- Request ID.
+- Model.
+- Tokens.
+- Latency in milliseconds.
+- Cost in USD.
+
+The dashboard reads the database configured by `RAGOPS_DB_PATH`.
+
+## Red-Team Scanner
+
+The scanner sends five concurrent malicious prompts to an OpenAI-compatible
+Chat Completions endpoint.
+
+Payload shape:
+
+```json
+{
+  "model": "test",
+  "messages": [
+    {
+      "role": "user",
+      "content": "malicious prompt"
+    }
+  ]
+}
+```
+
+Each result is classified as:
+
+- `Safe`: successful response includes a known refusal marker.
+- `Vulnerable`: successful response does not include a known refusal marker.
+- `Error`: request failed, body read failed, or HTTP status was non-success.
+
+The scanner prints counts plus per-case status, latency, prompt preview, and
+response or error preview. Results are not persisted.
+
+## RAG Evaluation
+
+The evaluator reads a local JSON dataset:
 
 ```json
 [
@@ -154,63 +190,34 @@ Dataset format:
 ]
 ```
 
-The evaluator calls OpenAI Chat Completions using `OPENAI_API_KEY` and prints
-the total evaluated records plus the average Faithfulness score.
+For each row, it asks OpenAI to return `1` when the answer is fully supported by
+the context and `0` otherwise. The command prints total evaluated records and
+average Faithfulness score. Dataset rows and judge responses are not persisted.
 
-Launch the local dashboard by running the proxy server:
+## Data Storage
 
-```bash
-cargo run -- serve
-```
+FinOps records are stored in SQLite table `llm_request_logs`.
 
-Open `http://localhost:8000/` in a browser. The dashboard reads FinOps metadata
-from the same SQLite database used by the proxy and renders total cost, request
-count, average latency, recent logs, and a cost bar chart.
-
-## Configuration
-
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `OPENAI_API_KEY` | Yes for proxy requests and eval runs | None | OpenAI API key used for upstream calls. |
-| `RAGOPS_DB_PATH` | No | `ragops_harness.sqlite3` | SQLite database path for local usage logs. |
-
-Configuration rules:
-
-- `.env` is loaded at startup before configuration is read.
-- Exported environment variables take precedence over `.env` values.
-- Missing `OPENAI_API_KEY` does not stop the server from booting, but proxy
-  requests return a JSON configuration error until the key is set and the
-  process is restarted.
-- `.env` is ignored by git and should never be committed.
-
-## Data Logged
-
-RAGOps Harness stores usage metadata only:
+Stored fields include:
 
 - Local request id.
 - Timestamp.
-- Provider.
-- Endpoint.
+- Provider and endpoint.
 - Model.
 - Upstream response id.
-- Prompt tokens.
-- Completion tokens.
-- Total tokens.
-- Cached prompt tokens when reported.
-- Estimated cost in USD.
+- Prompt, completion, total, and cached prompt tokens.
+- Estimated USD cost.
 - Latency in milliseconds.
 - Upstream success status code.
-- Whether the model matched a known pricing rule.
+- Whether pricing was known.
 
-Prompt and completion content are not persisted by the proxy. Red-team scan
-prompts and responses are printed to stdout only and are not persisted. RAG
-evaluation dataset rows and judge scores are also printed or processed in memory
-only and are not persisted. The dashboard reads existing FinOps metadata and
-does not write new records.
+Prompt and completion content are not stored by the proxy. Red-team prompts,
+scan responses, evaluation datasets, judge responses, and dashboard reports are
+printed or processed in memory only.
 
 ## Validation
 
-Run the local checks:
+Run local checks:
 
 ```bash
 cargo fmt --all
@@ -218,62 +225,79 @@ cargo check --target-dir /tmp/ragops-harness-target
 cargo test --target-dir /tmp/ragops-harness-target
 ```
 
-Current test coverage includes:
+Useful smoke checks:
 
-- Cost calculation with cached prompt tokens.
-- Unknown model pricing behavior.
-- SQLite usage log insertion.
-- Red-team refusal marker detection.
-- OpenAI-style response text extraction.
-- RAG evaluation prompt construction and binary score parsing.
-- CLI help, eval help, scan-report smoke checks, and dashboard HTTP smoke checks
-  are run manually as platform proof.
+```bash
+cargo run --target-dir /tmp/ragops-harness-target -- --help
+RAGOPS_DB_PATH=/tmp/ragops-cli-dashboard-smoke.sqlite \
+  cargo run --target-dir /tmp/ragops-harness-target -- dashboard
+```
 
-Live OpenAI integration is intentionally manual because it requires real
-credentials and may incur provider cost.
+Live OpenAI proxy and evaluation proof requires real credentials and may incur
+provider cost.
 
 ## Project Layout
 
 ```text
 src/
-  main.rs       CLI dispatch for serve, scan, and eval modes
-  proxy.rs      Chat Completions proxy, usage parsing, cost estimation, errors
-  db.rs         SQLite connection setup, schema, and usage log persistence
-  red_team.rs   Concurrent malicious-prompt scanner and terminal report
-  eval.rs       Local JSON RAG faithfulness evaluation through OpenAI
-  dashboard.rs  Axum FinOps stats API for the dashboard
-
-ui/
-  index.html    Static web dashboard frontend
+  main.rs       CLI dispatch for serve, dashboard, scan, and eval modes
+  proxy.rs      Axum proxy, OpenAI forwarding, usage parsing, cost estimation
+  db.rs         SQLite setup, schema, and FinOps usage persistence
+  dashboard.rs  Terminal FinOps report using comfy-table
+  red_team.rs   Concurrent malicious-prompt scanner
+  eval.rs       Local JSON RAG faithfulness evaluation
 
 docs/
   HARNESS.md        Human-agent operating model
   FEATURE_INTAKE.md Task classification and risk lanes
   ARCHITECTURE.md   Architecture rules and selected stack
   TEST_MATRIX.md    Behavior-to-proof status
-  product/          Product contracts
-  stories/          Story packets and evidence
+  product/          Current product contracts
+  stories/          Story packets and validation evidence
   decisions/        Architecture and product decision records
 ```
+
+## Architecture Notes
+
+Runtime stack:
+
+- Rust.
+- Tokio.
+- Axum.
+- Reqwest.
+- Rusqlite with bundled SQLite.
+- Clap.
+- Comfy Table.
+
+Primary flow:
+
+```text
+RAG app
+  -> local RAGOps proxy
+      -> OpenAI Chat Completions
+      -> SQLite FinOps log
+      -> CLI dashboard reads SQLite
+```
+
+See `docs/ARCHITECTURE.md` and `docs/decisions/` for accepted architectural
+choices and pivots.
 
 ## Current Limitations
 
 - OpenAI Chat Completions only.
-- Streaming requests are rejected.
-- No incoming proxy authentication yet.
+- Streaming proxy requests are not supported.
+- No incoming proxy authentication.
+- No provider retry policy beyond returning structured errors.
+- Pricing constants are maintained in code.
+- Dashboard is one-shot CLI output, not an interactive live view.
 - RAG evaluation requires live OpenAI credentials and has no offline judge mode.
-- The dashboard is served by the same local server as the proxy.
-- Dashboard Tailwind and Chart.js assets load from CDNs.
-- Pricing constants must be maintained as provider pricing changes.
-- No provider retry policy beyond returning a graceful JSON error.
 
 ## Security Notes
 
 - Keep `.env` local.
 - Do not paste provider keys into prompts, docs, issues, or shared logs.
-- Rotate the API key if it was ever committed or shared.
-- The proxy logs operational metadata and FinOps records, not prompt or
-  completion bodies.
+- Rotate any key that was committed or shared.
+- The proxy stores operational metadata, not prompt or completion content.
 
 ## License
 

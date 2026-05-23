@@ -12,7 +12,6 @@ use chrono::Utc;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -65,9 +64,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let state = AppState::new(client, db, openai_api_key);
     let app = Router::new()
         .route("/health", get(health))
-        .route("/api/stats", get(crate::dashboard::api_stats))
         .route("/v1/chat/completions", post(chat_completions))
-        .fallback_service(ServeDir::new("ui"))
         .with_state(state);
 
     let address = SocketAddr::from(([0, 0, 0, 0], 8000));

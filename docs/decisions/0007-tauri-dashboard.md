@@ -4,7 +4,7 @@ Date: 2026-05-22
 
 ## Status
 
-Accepted
+Superseded by `0008-pure-cli-dashboard`
 
 ## Context
 

@@ -4,6 +4,7 @@ mod eval;
 mod proxy;
 mod red_team;
 
+use std::env;
 use std::error::Error;
 
 use clap::{Parser, Subcommand};
@@ -14,17 +15,19 @@ type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 #[command(
     name = "ragops-harness",
     version,
-    about = "Local RAGOps proxy, web dashboard, red-team scanner, and RAG evaluator"
+    about = "Local RAGOps proxy, CLI dashboard, red-team scanner, and RAG evaluator"
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Command>,
+    command: Option<Commands>,
 }
 
 #[derive(Debug, Subcommand)]
-enum Command {
+enum Commands {
     /// Run the local OpenAI Chat Completions proxy.
     Serve,
+    /// Print a one-shot FinOps report from the local SQLite database.
+    Dashboard,
     /// Run the red-team prompt scanner against an OpenAI-compatible endpoint.
     Scan {
         /// Target URL that accepts OpenAI Chat Completions JSON.
@@ -46,10 +49,16 @@ async fn main() -> AppResult<()> {
         .with_level(true)
         .init();
 
-    match Cli::parse().command.unwrap_or(Command::Serve) {
-        Command::Serve => proxy::run().await?,
-        Command::Scan { target } => red_team::run_scan(&target).await?,
-        Command::Eval { dataset } => eval::run_eval(&dataset).await?,
+    let cli = Cli::parse();
+    let _ = dotenvy::dotenv();
+    let db_path =
+        env::var("RAGOPS_DB_PATH").unwrap_or_else(|_| "ragops_harness.sqlite3".to_owned());
+
+    match &cli.command {
+        None | Some(Commands::Serve) => proxy::run().await?,
+        Some(Commands::Dashboard) => crate::dashboard::run_dashboard(&db_path).await?,
+        Some(Commands::Scan { target }) => red_team::run_scan(target).await?,
+        Some(Commands::Eval { dataset }) => eval::run_eval(dataset).await?,
     }
 
     Ok(())
