@@ -11,7 +11,7 @@ The system is intentionally small and CLI-first. Product behavior is tracked in
 
 ## Current Status
 
-Current milestone: `US-042 Pure CLI Dashboard`.
+Current milestone: `US-043 Unified Live TUI Monitor`.
 
 Implemented:
 
@@ -20,7 +20,9 @@ Implemented:
 - `POST /v1/chat/completions` forwarding to OpenAI Chat Completions.
 - SQLite FinOps logging for token usage, latency, model, upstream id, and
   estimated cost.
-- CLI dashboard that prints aggregate FinOps stats and the five latest logs.
+- Live CLI dashboard in `serve` mode that refreshes aggregate FinOps stats and
+  the five latest logs every two seconds.
+- One-shot CLI dashboard command for snapshot reports.
 - CLI red-team scanner for OpenAI-compatible Chat Completions endpoints.
 - CLI RAG faithfulness evaluator using OpenAI as a judge.
 
@@ -62,7 +64,7 @@ Show the command surface:
 cargo run -- --help
 ```
 
-Run the proxy:
+Run the proxy with the live CLI dashboard:
 
 ```bash
 cargo run
@@ -128,23 +130,36 @@ complete JSON response.
 
 ## CLI Dashboard
 
-The dashboard is read-only and prints a one-shot terminal report:
+The `serve` command starts the Axum proxy in a background Tokio task and keeps
+the foreground terminal on a live dashboard loop:
 
-```text
-=== RAGOps FinOps CLI Report ===
-Database: ragops_harness.sqlite3
-Total Requests: 0
-Total Cost (USD): 0.000000
-Average Latency (ms): 0.00
+```bash
+cargo run -- serve
 ```
 
-It then renders a `comfy-table` table with:
+The dashboard enters the terminal alternate screen, hides the cursor, and
+redraws in place every two seconds. It shows total request count, total
+estimated cost, average latency, flagged entries, and the five latest logged
+proxy requests. Ctrl-C exits the live view and restores the terminal.
+
+The dashboard can also print a one-shot terminal report:
+
+```text
++======================================================================+
+|                    RAGOps Live FinOps Monitor                       |
+|              Local OpenAI Proxy + SQLite Usage Telemetry            |
++======================================================================+
+```
+
+It then renders summary cards and a `comfy-table` table with:
 
 - Request ID.
+- Timestamp.
 - Model.
 - Tokens.
 - Latency in milliseconds.
 - Cost in USD.
+- Status code.
 
 The dashboard reads the database configured by `RAGOPS_DB_PATH`.
 
@@ -240,10 +255,10 @@ provider cost.
 
 ```text
 src/
-  main.rs       CLI dispatch for serve, dashboard, scan, and eval modes
+  main.rs       CLI dispatch and serve-mode proxy/dashboard concurrency
   proxy.rs      Axum proxy, OpenAI forwarding, usage parsing, cost estimation
   db.rs         SQLite setup, schema, and FinOps usage persistence
-  dashboard.rs  Terminal FinOps report using comfy-table
+  dashboard.rs  Terminal FinOps dashboard rendering using comfy-table
   red_team.rs   Concurrent malicious-prompt scanner
   eval.rs       Local JSON RAG faithfulness evaluation
 
@@ -268,6 +283,7 @@ Runtime stack:
 - Rusqlite with bundled SQLite.
 - Clap.
 - Comfy Table.
+- Crossterm.
 
 Primary flow:
 
@@ -276,7 +292,7 @@ RAG app
   -> local RAGOps proxy
       -> OpenAI Chat Completions
       -> SQLite FinOps log
-      -> CLI dashboard reads SQLite
+      -> live CLI dashboard reads SQLite
 ```
 
 See `docs/ARCHITECTURE.md` and `docs/decisions/` for accepted architectural
@@ -289,7 +305,7 @@ choices and pivots.
 - No incoming proxy authentication.
 - No provider retry policy beyond returning structured errors.
 - Pricing constants are maintained in code.
-- Dashboard is one-shot CLI output, not an interactive live view.
+- Dashboard has no keyboard-interactive controls.
 - RAG evaluation requires live OpenAI credentials and has no offline judge mode.
 
 ## Security Notes

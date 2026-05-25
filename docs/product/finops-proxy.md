@@ -11,6 +11,8 @@ block, calculates an estimated USD cost, and persists a local SQLite usage log.
 ## Runtime Contract
 
 - Server binds to `0.0.0.0:8000`.
+- `cargo run` and `cargo run -- serve` run the server on a background Tokio
+  task while the foreground task renders the live CLI dashboard.
 - `GET /health` returns a JSON health response.
 - `POST /v1/chat/completions` accepts OpenAI Chat Completions JSON.
 - The request must contain a non-empty string `model`.

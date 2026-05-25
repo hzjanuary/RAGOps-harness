@@ -41,6 +41,19 @@ US-042 replaces the web dashboard with a pure CLI dashboard:
 
 See `docs/decisions/0008-pure-cli-dashboard.md`.
 
+US-043 unifies proxy serving and terminal monitoring:
+
+- `serve` opens one shared `Database` handle.
+- Axum proxy state receives a clone of that handle and runs in a background
+  Tokio task.
+- The foreground task continuously calls `dashboard::run_dashboard(&db)` and
+  sleeps for two seconds between renders.
+- `crossterm` owns alternate-screen entry, cursor visibility, in-place clearing,
+  and Ctrl-C cleanup for the live dashboard.
+- `src/dashboard.rs` remains free of Axum web structures.
+
+See `docs/decisions/0009-unified-live-tui-monitor.md`.
+
 The remaining sections keep the generic architecture questions and boundary
 rules that future implementation should adapt as additional product surfaces
 arrive.
